@@ -4,20 +4,21 @@
 #include <Servo.h>
 
 // ------------------------ PINES ------------------------
-#define PIN_TOUCH 4        // TTP223 capacitivo
-#define PIN_METAL 5        // Sensor inductivo LJ12A3
-#define PIN_HUMEDAD 6      // DHT22
-
+#define PIN_TOUCH 5        // TTP223 capacitivo
+#define PIN_METAL 6        // Sensor inductivo LJ12A3
+#define PIN_HUMEDAD 7      // DHT22
+#define trigPin 8
+#define echoPin 9
 //SERVOS
 //SERVO 0 - COMPUERTA TUBO
 //SERVO 1 - COMPUERTA METAL
 //SERVO 2 - COMPUERTA PLASTICO
 //SERVO 3 - COMPUERTA ORGANICOS
 //SERVO 4 - COMPUERTA PAPEL
-
+Servo servos[5];
 // ------------------------ DHT11 cambiar a 22 ------------------------
 #define DHTTYPE DHT22
-DHT dht(DHTPIN, DHTTYPE);
+DHT dht(PIN_HUMEDAD, DHTTYPE);
 
 // ------------------------ TCS34725 ------------------------
 Adafruit_TCS34725 tcs = Adafruit_TCS34725(
@@ -32,21 +33,34 @@ bool hay_plastico = false;
 float hay_humedad = 0;
 
 //                FUNCIONES DE SERVOMOTORES
-void abrir_compuerta(int numServo){
+void abrir_compuerta(int numServo, int posicion = 125){
   if (numServo < 0 || numServo > 5) return; // Validación de rango
   
   servos[numServo].write(180);
   delay(4000);
 }
 
-void cerrar_compuerta(int numServo){
-  if (numServo < 0 || numServo > 5) return; // Validación de rango
-  
-  servos[numServo].write(35);
+void cerrar_compuerta(int numServo, int posicion = 35){  
+  servos[numServo].write(posicion);
 }
 
 
 //                FUNCIONES DE SENSORES
+// ---- SENSOR DE DISTANCIA ULTRASONICO------
+long sensor_distancia(){
+  digitalWrite(trigPin, LOW);
+  delayMicroseconds(2);
+
+  digitalWrite(trigPin, HIGH);
+  delayMicroseconds(10);
+  digitalWrite(trigPin, LOW);
+
+  // Recibir señal
+  long duracion = pulseIn(echoPin, HIGH);
+
+  // Convertir tiempo → distancia (cm)
+  return duracion * 0.034 / 2;
+}
 
 // ---- SENSOR CAPACITIVO TTP223 ----
 bool sensor_capacitivo() {
@@ -100,46 +114,59 @@ void setup() {
     Serial.println("No se encontró el TCS34725!");
   }
 
-  servos[0].attach(7);
-  servos[1].attach(8);
-  servos[2].attach(9);
-  servos[3].attach(10);
-  servos[4].attach(11);
+  servos[0].attach(0);
+  servos[1].attach(1);
+  servos[2].attach(2);
+  servos[3].attach(3);
+  servos[4].attach(4);
 
+  // --- POSICIÓN INICIAL (evita los movimientos al inicio) ---
+  servos[1].write(25);
+
+  for (int i = 2; i < 4; i++) {
+    servos[i].write(35);  // o la posición que tú quieras como inicial
+  }
+
+  delay(500);
   Serial.println("Sistema listo!");
 }
 
 void loop() {
 
 
-  hay_objeto = sensor_capacitivo(); //para saber si hay algo
-
-  if (hay_objeto) {
+  if (sensor_capacitivo() || sensor_distancia() < 8) {
     Serial.println("Objeto detectado");
     // revisar metal
-    humedad_inicio = sensor_humedad();
-    hay_metal = sensor_metal();
-    if (hay_metal) {
+    float humedad_inicio = sensor_humedad();
+
+  if (sensor_metal()) {
       hay_plastico = false;
       Serial.println("Es METAL");
       abrir_compuerta(1);
     } else {
-      hay_plastico = sensor_plastico();
-      if (hay_plastico) {
+      if (sensor_plastico()) {
         Serial.println("Es PLÁSTICO");
         abrir_compuerta(2);
       } else {
-        delay(2000);
-        humedad_final = sensor_humedad();
-        if (1 <= (humedad_final - humedad_inicial)) abrir_compuerta(3);
+        delay(8000);
+        float humedad_final = sensor_humedad();
+        if (1 <= (humedad_final - humedad_inicio)){
+          abrir_compuerta(3);
+        } 
+        else{
+          // if es papel entonces
+          abrir_compuerta(4, 160);
+        }
       }
     }
 
-    hay_humedad = sensor_humedad();
-    Serial.print("Humedad detectada: ");
-    Serial.println(hay_humedad);
-
     abrir_compuerta(0);
+    delay(6000);
+    cerrar_compuerta(1,25);
+
+    for(int u=2; u<6;u++){
+      cerrar_compuerta(u);
+    }
   } else {
     Serial.println("No hay objeto");
     hay_metal = false;
