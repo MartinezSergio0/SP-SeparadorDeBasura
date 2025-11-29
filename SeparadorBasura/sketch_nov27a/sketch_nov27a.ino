@@ -56,6 +56,7 @@ long sensor_distancia(){
   // Recibir señal
   long duracion = pulseIn(echoPin, HIGH);
   long distancia = duracion * 0.034 / 2;
+  Serial.print("Distancia: ");
   Serial.println(distancia);
 
   // Convertir tiempo → distancia (cm)
@@ -73,22 +74,19 @@ bool sensor_metal() {
 }
 
 // ---- SENSOR DE COLOR PARA PLÁSTICO ----
-bool sensor_plastico() {
+uint16_t sensor_plastico() {
   uint16_t r, g, b, c;
   tcs.getRawData(&r, &g, &b, &c);
+  Serial.print("R: ");
+  Serial.print(r/c);
+  Serial.print("G: ");
+  Serial.print(g/c);
+  Serial.print("B: ");
+  Serial.print(b/c);
 
-  if (c < 50) return false;  
-
-  // Convertir a RGB (0–255)
-  float red = (r * 255.0) / c;
-  float green = (g * 255.0) / c;
-  float blue = (b * 255.0) / c;
-
-  // valor de prueba para plastico (no c cual sea)
-  if (red > 80 && green > 80 && blue > 80) return true;
-
-  return false;
+  return c;
 }
+
 
 // ---- SENSOR DE HUMEDAD ----
 float sensor_humedad() {
@@ -123,6 +121,7 @@ void setup() {
   servos[4].attach(6);
 
   // --- POSICIÓN INICIAL (evita los movimientos al inicio) ---
+  servos[0].write(20);
   servos[1].write(25);
 
   for (int i = 2; i < 5; i++) {
@@ -135,11 +134,13 @@ void setup() {
 
 void loop() {
 
-
-  if (sensor_capacitivo() || sensor_distancia() < 6) {
+  uint16_t luz_inicial= sensor_plastico();
+  Serial.println("esta es la luz inicial");
+  Serial.println(luz_inicial);
+  float humedad_inicio = sensor_humedad();
+  long distancia=sensor_distancia();
+  if (sensor_capacitivo() || distancia < 6 || distancia > 10) {
     Serial.println("Objeto detectado");
-    // revisar metal
-    float humedad_inicio = sensor_humedad();
     delay(2000);
     if(sensor_capacitivo()){
     Serial.println(humedad_inicio);
@@ -156,29 +157,37 @@ void loop() {
         } 
 
     }
-    // else {
-    //   if (sensor_plastico()) {
-    //     Serial.println("Es PLÁSTICO");
-    //     abrir_compuerta(2);
-    //   } 
-        else{
-          // if es papel entonces
-          abrir_compuerta(4, 160);
-        }
+    else {
+      uint16_t luz_final= sensor_plastico();
+      Serial.println("esta es la luz final");
+      Serial.println(luz_final);
+      uint16_t suma= (luz_final - luz_inicial);
+      Serial.println(suma);
+      if (70 >= (luz_final - luz_inicial)) {
+        Serial.println("Es PLÁSTICO");
+        abrir_compuerta(2);
+      } 
+      else{
+        // if es papel entonces
+        abrir_compuerta(4, 160);
+      }
+    }
       
 
 
-      // abrir_compuerta(0);
-      delay(6000);
+      abrir_compuerta(0,160);
+      // delay(6000);
+      cerrar_compuerta(0,20);
       cerrar_compuerta(1,25);
 
       for(int u=2; u<5;u++){
         cerrar_compuerta(u);
       }
-    } else {
+      delay(4000);
+  } else {
       Serial.println("No hay objeto");
       
-    }
+  }
 
   Serial.println("-----------------------------");
   delay(500);
